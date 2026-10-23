@@ -1,0 +1,34 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+*venv*/
+waniRSA/
+
+# OS and Shell Artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary files & logs
+*.log
+*.tmp
+
+# Large Wordlists & Dictionaries
+*.wordlist
+rockyou*.txt

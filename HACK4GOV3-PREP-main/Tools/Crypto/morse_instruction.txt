@@ -1,0 +1,104 @@
+# ==============================================================================
+# HACK4GOV CTF - MORSE CODE TOOLKIT INSTRUCTIONS
+# Location: Tools/Crypto/morse.py
+# ==============================================================================
+
+# STEP 0: Working Directory Verification
+# In Git Bash, ensure you are in the repository root:
+# cd HACK4GOV3-PREP-main
+
+
+# Start the interactive tapper:
+python Tools/Crypto/morse.py -t
+
+# Start tapper with audible beeps enabled:
+python Tools/Crypto/morse.py -t -s
+
+# Controls:
+# - LEFT CLICK   (or '.' key) = Dot (.) [Short beep if -s]
+# - RIGHT CLICK  (or '-' key) = Dash (-) [Long beep if -s]
+# - SPACEBAR (1st tap)        = Completes the current letter (e.g. ... -> (S))
+# - SPACEBAR (2nd tap)        = Inserts word space (/)
+# - BACKSPACE                 = Undo last tapped symbol / letter
+# - ENTER                     = Prints the full accumulated message
+# - ESC or Ctrl+C             = Cleanly exits tapper
+
+
+
+# ==============================================================================
+# 3. DIRECT CLI DECODING & ENCODING
+# ==============================================================================
+
+# 1. Decode standard Morse string:
+python Tools/Crypto/morse.py -d "... --- ..."
+
+# 2. Decode CTF Flag format:
+python Tools/Crypto/morse.py -d ".... .- -.-. -.- ....- --. --- ...- -.--. -.-. - ..-. ..--.- ..-. .-.. .- --. -.--.-"
+
+# 3. Decode binary Morse (0 = dot, 1 = dash):
+python Tools/Crypto/morse.py -d "000 111 000"
+
+# 4. Decode spoken/written dit-dah:
+python Tools/Crypto/morse.py -d "di-di-dit dah-dah-dah di-di-dit"
+
+# 5. Decode from a file:
+python Tools/Crypto/morse.py -f challenge_morse.txt
+
+# 6. Encode plaintext to Morse:
+python Tools/Crypto/morse.py -e "HACK4GOV{CTF_FLAG}"
+
+# 7. Encode and play audible audio beeps (Windows):
+python Tools/Crypto/morse.py -e "SOS" -s
+
+
+# ==============================================================================
+# 4. AUDIO SIGNAL DECODER (.WAV FILES)
+# Automatically extracts Morse tone pulses from CTF audio challenges.
+# ==============================================================================
+
+# 1. Standard automatic pulse detection:
+python Tools/Crypto/morse.py -a challenge_audio.wav
+
+# 2. If signal has background noise, adjust the energy threshold (default 0.15):
+python Tools/Crypto/morse.py -a noisy_audio.wav --threshold 0.25
+
+# 3. If signal is faint/quiet, lower the threshold:
+python Tools/Crypto/morse.py -a quiet_audio.wav --threshold 0.08
+
+
+# ==============================================================================
+# 5. LIVE MICROPHONE AUDIO MORSE LISTENER (ANTI-VOICE / SPEECH-FILTERED)
+# Automatically captures sound from PC mic, suppresses human voice (< 460 Hz),
+# validates pure sine tonality (>= 7.5x), and prints decrypted ASCII text live.
+# ==============================================================================
+
+# 1. Start live microphone listener (Auto-calibrates noise floor & auto-detects 520-1250 Hz beeps):
+python Tools/Crypto/morse.py --mic
+
+# 2. Target specific frequency (e.g. 800 Hz) with custom threshold if needed:
+python Tools/Crypto/morse.py --mic --freq 800 --threshold 0.02
+
+# 3. Log live transcribed microphone messages to file:
+python Tools/Crypto/morse.py --mic -o mic_transcript.txt
+
+
+# ==============================================================================
+# 6. TYPESCRIPT REAL-TIME LISTENER & TRANSCRIPT RETRANSLATOR (NODE.JS)
+# Location: Tools/Crypto/morse.ts
+# ==============================================================================
+
+# 1. Start real-time TypeScript listener:
+node Tools/Crypto/morse.ts --listen
+
+# 2. Start listener and record full transcript of decrypted messages to file:
+node Tools/Crypto/morse.ts --listen --transcript morse_transcript.txt
+
+# 3. Direct decode string via TypeScript:
+node Tools/Crypto/morse.ts -d "... --- ..."
+
+# 4. Direct encode string via TypeScript:
+node Tools/Crypto/morse.ts -e "HACK4GOV{CTF_FLAG}"
+
+# 5. Decrypt full Morse file via TypeScript:
+node Tools/Crypto/morse.ts -f morse_message.txt
+

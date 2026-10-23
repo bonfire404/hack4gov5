@@ -1,0 +1,83 @@
+# ==============================================================================
+# HACK4GOV CTF - STEGANOGRAPHY INSTRUCTIONS & CHEATSHEET
+# Location: Tools/Stego/
+# ==============================================================================
+
+# STEP 0: Working Directory Verification
+# In Git Bash, ensure you are in the repository root:
+# cd HACK4GOV3-PREP-main
+
+
+# ==============================================================================
+# 1. STEGSOLVE (JAVA IMAGE PLANE ANALYZER)
+# Best for examining hidden LSB bitplanes in PNG/BMP images.
+# ==============================================================================
+
+# Launch StegSolve (CLI):
+java -jar Tools/Forensics/stegsolve.jar
+
+# Or 1-click launcher on Windows:
+Tools/Forensics/run_stegsolve.bat
+
+# Workflow inside StegSolve:
+# 1. File -> Open image.
+# 2. Click the '<' and '>' arrows at the bottom to cycle through color planes:
+#    - Red plane 0, Green plane 0, Blue plane 0 (often reveals hidden QR codes or text)
+#    - Inversion / Random color maps
+# 3. Extract hidden LSB payload:
+#    - Menu: Analyse -> Data Extract
+#    - Check Red 0, Green 0, Blue 0 (or Alpha 0)
+#    - Click 'Preview' (check if text starts with flag format or PK.. for zip)
+#    - Click 'Save Bin' or 'Save Text'
+
+
+# ==============================================================================
+# 2. ZSTEG (PNG & BMP LSB ANALYSIS)
+# Fast CLI tool for detecting Least Significant Bit payloads.
+# ==============================================================================
+
+# 1. Automatic scan across all planes and formats:
+zsteg -a image.png
+
+# 2. Extract specific detected payload stream:
+zsteg -E "b1,bgr,lsb,xy" image.png > extracted_payload.bin
+
+
+# ==============================================================================
+# 3. STEGHIDE & OUTGUESS (JPEG PAYLOAD EXTRACTION)
+# ==============================================================================
+
+# 1. Steghide - extract without password (blank pass):
+steghide extract -sf image.jpg -p ""
+
+# 2. Steghide - extract with password:
+steghide extract -sf image.jpg -p "<PASSWORD>"
+
+# 3. Outguess - extract hidden message from JPEG:
+outguess -r image.jpg extracted_output.txt
+
+
+# ==============================================================================
+# 4. AUDIO STEGANOGRAPHY (SPECTROGRAMS)
+# When a challenge provides a .wav or .mp3 file.
+# ==============================================================================
+
+# 1. Open audio file in Sonic Visualiser:
+#    File -> Open -> audio.wav
+# 2. Add Spectrogram:
+#    Pane -> Add Spectrogram -> Channel: All Channels
+# 3. Inspect high frequencies:
+#    Scroll horizontally and adjust the vertical frequency scale.
+#    Look for visual letters, numbers, or Morse code etched into the sound waves.
+
+
+# ==============================================================================
+# 5. PASSWORD-PROTECTED ARCHIVE CRACKING (ZIP / RAR)
+# ==============================================================================
+
+# 1. Fast ZIP dictionary attack using fcrackzip:
+fcrackzip -u -D -p /usr/share/wordlists/rockyou.txt encrypted.zip
+
+# 2. John the Ripper ZIP cracking (handles Deflate64 and WinZip AES):
+zip2john encrypted.zip > zip.hash
+john --wordlist=/usr/share/wordlists/rockyou.txt zip.hash

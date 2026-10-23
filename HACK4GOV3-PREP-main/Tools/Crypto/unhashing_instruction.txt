@@ -1,0 +1,47 @@
+# ==============================================================================
+# HACK4GOV CTF - 100% OFFLINE UNHASHING & CRACKING INSTRUCTIONS
+# Tool: Tools/Crypto/unhasher.py
+# Note: Zero external network callouts - fully compliant with airgap / RoE rules.
+# ==============================================================================
+
+# STEP 0: Working Directory Verification
+# In Git Bash, ensure you are in the repository root:
+# cd HACK4GOV3-PREP-main
+
+
+# ==============================================================================
+# METHOD 1: 8-CORE PARALLEL BRUTE FORCE (NO WORDLIST NEEDED)
+# Uses all 8 CPU cores with raw C-level binary comparisons.
+# Best for PINs, numbers, or short passwords (1 to 5 characters).
+# ==============================================================================
+
+# 1. Crack 4-digit numeric PINs (0-9) - Instant (<1 sec):
+python Tools/Crypto/unhasher.py -t "e48e13207341b6bffb7fb1622282247b" -b --charset digits --max-len 4
+
+# 2. Crack 6-digit numeric PINs (0-9) - Fast (~1-2 sec across 8 cores):
+python Tools/Crypto/unhasher.py -t "cc738a1f81cf87103233db1af0ab63f7" -b --charset digits --max-len 6
+
+# 3. Crack lowercase words (a-z) up to length 5:
+python Tools/Crypto/unhasher.py -t "b0759e17c7cc70d7522a6b63a05c914e" -b --charset lower --min-len 1 --max-len 5
+
+# 4. Crack alphanumeric characters (a-z, A-Z, 0-9) up to length 4:
+python Tools/Crypto/unhasher.py -t "21232f297a57a5a743894a0e4a801fc3" -b --charset alphanum --max-len 4
+
+# 5. Limit CPU core usage (e.g. use 4 workers instead of all 8):
+python Tools/Crypto/unhasher.py -t "e48e13207341b6bffb7fb1622282247b" -b --charset digits --max-len 4 -j 4
+
+
+# ==============================================================================
+# METHOD 2: DICTIONARY ATTACK (OFFLINE WORDLISTS)
+# Best for words longer than 5 characters or standard passwords.
+# ==============================================================================
+
+# 1. Standard wordlist dictionary attack (using local rockyou.txt):
+python Tools/Crypto/unhasher.py -t "63a9f0ea7bb98050796b649e85481845" -w /usr/share/wordlists/rockyou.txt
+
+# 2. Wordlist attack WITH rule mutations (-m):
+# Automatically checks: adds '1', '123', '!', '2026', CAPITALIZES, and leetspeak (@dm!n)
+python Tools/Crypto/unhasher.py -t "5d41402abc4b2a76b9719d911017c592" -w wordlist.txt -m
+
+# 3. Force explicit algorithm (e.g. NTLM):
+python Tools/Crypto/unhasher.py -t "209c6174da490caeb422f3fa5a7ae634" -a ntlm -w wordlist.txt

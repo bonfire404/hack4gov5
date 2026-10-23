@@ -1,0 +1,37 @@
+# ==============================================================================
+# HACK4GOV CTF - HASHING INSTRUCTIONS
+# Tool: Tools/Crypto/hasher.py
+# ==============================================================================
+
+# STEP 0: Working Directory Verification
+# In Git Bash, ensure you are in the repository root:
+# cd HACK4GOV3-PREP-main
+
+
+# 1. Multi-Hash a Plaintext String
+# Generates MD5, SHA1, SHA224, SHA256, SHA384, SHA512, and NTLM simultaneously:
+python Tools/Crypto/hasher.py -s "admin"
+python Tools/Crypto/hasher.py -s "bonfire"
+python Tools/Crypto/hasher.py -s "flag{sample_flag}"
+
+
+# 2. Hash a Single File
+# Safely streams large files (memory dumps, disk images, PCAPs, binaries) in 64KB chunks:
+python Tools/Crypto/hasher.py -f readme.md
+python Tools/Crypto/hasher.py -f test_evidence.bin
+python Tools/Crypto/hasher.py -f Tools/root.service
+
+
+# 3. Identify an Unknown Hash Format
+# Analyzes digest length, character patterns, and modular crypt prefixes:
+python Tools/Crypto/hasher.py -i "5d41402abc4b2a76b9719d911017c592"
+python Tools/Crypto/hasher.py -i "209c6174da490caeb422f3fa5a7ae634"
+python Tools/Crypto/hasher.py -i "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+
+
+# 4. Batch-Hash All Files in a Directory
+# Generates SHA256 checksums for every file in a target folder (CTF Forensics / Integrity checks):
+python Tools/Crypto/hasher.py -d Challenges/Forensics/Solved/Verify/files/
+
+# To batch-hash using a different algorithm (e.g. MD5):
+python Tools/Crypto/hasher.py -d Challenges/Crypto/ -a md5

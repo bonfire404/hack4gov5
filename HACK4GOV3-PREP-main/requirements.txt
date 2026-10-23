@@ -1,0 +1,5 @@
+# Standard Python libraries for CTF challenges and solvers
+pwntools>=4.12.0
+pycryptodome>=3.20.0
+requests>=2.32.0
+ROPGadget>=7.4

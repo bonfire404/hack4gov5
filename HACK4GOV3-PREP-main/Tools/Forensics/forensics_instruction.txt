@@ -1,0 +1,90 @@
+# ==============================================================================
+# HACK4GOV CTF - FORENSICS INSTRUCTIONS & CHEATSHEET
+# Location: Tools/Forensics/
+# ==============================================================================
+
+# STEP 0: Working Directory Verification
+# In Git Bash, ensure you are in the repository root:
+# cd HACK4GOV3-PREP-main
+
+
+# ==============================================================================
+# 1. FILE HEADER INSPECTION & CORRUPTION REPAIR (MAGIC BYTES)
+# When a challenge file won't open or has an unknown extension.
+# ==============================================================================
+
+# Check the first 16 bytes in hexadecimal:
+xxd -l 16 challenge_file.bin
+
+# Standard Hex Signatures:
+# PNG:  89 50 4E 47 0D 0A 1A 0A
+# JPG:  FF D8 FF E0  (or FF D8 FF E1)
+# GIF:  47 49 46 38 39 61
+# PDF:  25 50 44 46
+# ZIP:  50 4B 03 04
+# ELF:  7F 45 4C 46
+
+# Quick Python Header Fix (Example: Restore corrupted PNG header):
+python -c '
+with open("corrupted.png", "r+b") as f:
+    f.seek(0)
+    f.write(bytes.fromhex("89504E470D0A1A0A"))
+print("[+] Header restored to PNG.")
+'
+
+
+# ==============================================================================
+# 2. STRING SEARCHING & METADATA CARVING
+# ==============================================================================
+
+# 1. Extract readable strings filtered for CTF flags:
+strings -n 8 target_file | grep -iE "flag|hack4gov|pass|user|admin"
+
+# 2. View EXIF metadata (GPS coordinates, author, camera, hidden comments):
+exiftool target_image.jpg
+
+# 3. Automatically extract embedded hidden files (ZIPs/images inside images):
+binwalk -e target_file
+
+# 4. Alternative carver for damaged/concatenated data:
+foremost -i target_file -o output_carved/
+
+
+# ==============================================================================
+# 3. NETWORK FORENSICS (WIRESHARK & TSHARK PCAP ANALYSIS)
+# ==============================================================================
+
+# Wireshark GUI Display Filters:
+# - Filter for HTTP logins/POST requests:  http.request.method == "POST"
+# - Search packet bytes for flag text:    frame contains "hack4gov" || frame contains "flag"
+# - Isolate a conversation stream:        tcp.stream eq 0
+# - Identify DNS data exfiltration:       dns.flags.response == 0
+# - Export files transferred over wire:   File -> Export Objects -> HTTP / SMB / IMF
+
+# Tshark Command-Line One-Liners (Fast CLI extraction):
+# 1. Print all HTTP POST request bodies from PCAP:
+tshark -r capture.pcap -Y 'http.request.method == "POST"' -T fields -e http.file_data
+
+# 2. Extract all unique queried DNS hostnames:
+tshark -r capture.pcap -T fields -e dns.qry.name | sort -u
+
+# 3. Extract transmitted cleartext credentials:
+tshark -r capture.pcap -Y 'http contains "password" || http contains "passwd"' -T fields -e text
+
+
+# ==============================================================================
+# 4. MEMORY FORENSICS (VOLATILITY 2 / 3 QUICK REFERENCE)
+# ==============================================================================
+
+# Volatility 2 Syntax:
+# 1. Detect image profile:
+# vol.py -f memory.raw imageinfo
+
+# 2. List running processes:
+# vol.py -f memory.raw --profile=<PROFILE> pslist
+
+# 3. Search for files containing flag or sensitive names:
+# vol.py -f memory.raw --profile=<PROFILE> filescan | grep -iE "flag|desktop|secret"
+
+# 4. Dump target file by memory physical offset:
+# vol.py -f memory.raw --profile=<PROFILE> dumpfiles -Q <OFFSET> -D .

@@ -1,0 +1,111 @@
+# ==============================================================================
+# HACK4GOV CTF - REVERSE ENGINEERING INSTRUCTIONS & CHEATSHEET
+# Location: Tools/Reversing/
+# ==============================================================================
+
+# STEP 0: Working Directory Verification
+# In Git Bash, ensure you are in the repository root:
+# cd HACK4GOV3-PREP-main
+
+
+# ==============================================================================
+# 1. INITIAL BINARY RECONNAISSANCE
+# When given an unknown executable binary (ELF, EXE, APK, class).
+# ==============================================================================
+
+# 1. Automated 1-Second Binary Triage (Architecture, Flags, Functions, XOR keys):
+python Tools/Reversing/rev_triage.py path/to/binary_name
+
+# 2. Identify file architecture manually (32-bit / 64-bit / ARM / x86):
+file binary_name
+
+# 2. Check binary security mitigations (Canary, NX, PIE, RELRO):
+checksec --file=binary_name
+
+# 3. Search for hardcoded plaintext flags, credentials, or strings:
+strings -a binary_name | grep -iE "flag|hack4gov|pass|correct|congrat|winner"
+
+# 4. View detailed binary sections and entrypoint:
+readelf -h binary_name
+objdump -f binary_name
+
+
+# ==============================================================================
+# 2. DYNAMIC FUNCTION CALL TRACING (FASTEST CTF FLAG CAPTURE)
+# Many beginner/intermediate CTFs compare your input using strcmp() in plaintext!
+# ==============================================================================
+
+# 1. Trace C library calls (intercepts strcmp, strncmp, printf, fopen):
+ltrace ./binary_name
+# When it prompts for password, enter "test1234".
+# Watch the output for: strcmp("test1234", "hack4gov{r3v_fl4g_h3r3}") == 1
+
+# 2. Trace low-level Linux system calls:
+strace ./binary_name
+
+
+# ==============================================================================
+# 3. GHIDRA STATIC ANALYSIS WORKFLOW
+# Best for complex algorithms, XOR keys, and obfuscated routines.
+# ==============================================================================
+
+# 1. Launch Ghidra:
+#    Open Ghidra -> File -> New Project -> Non-Shared Project.
+# 2. Import Binary:
+#    Drag binary into Ghidra -> Double click the file to open CodeBrowser.
+# 3. Auto-Analyze:
+#    Click 'Yes' to analyze -> Accept default analyzers -> Click 'Analyze'.
+# 4. Locate Key Logic:
+#    - In the 'Symbol Tree' window (middle left), expand 'Functions'.
+#    - Filter for 'main', 'validate', 'check', 'verify', or 'auth'.
+# 5. Review Decompiled C:
+#    - Click the function name.
+#    - Read the C pseudo-code in the 'Decompiler' window on the right.
+#    - Look for loop logic (XOR operations `^`, array indexing, or math checks).
+
+
+# ==============================================================================
+# 4. GDB (GNU DEBUGGER) DYNAMIC BREAKPOINTS
+# Inspect registers and memory during execution.
+# ==============================================================================
+
+# 1. Start GDB:
+gdb ./binary_name
+
+# 2. Disassemble main function:
+# (gdb) disassemble main
+
+# 3. Set a breakpoint right before flag check:
+# (gdb) break *check_flag
+# OR set by address:
+# (gdb) break *0x00401234
+
+# 4. Run the program:
+# (gdb) run
+
+# 5. Read register values as strings when breakpoint hits:
+# (gdb) x/s $rdi
+# (gdb) x/s $rsi
+# (gdb) x/s $rax
+
+# 6. Step through instructions:
+# (gdb) ni   (next instruction, step over)
+# (gdb) si   (step into function)
+# (gdb) c    (continue execution)
+
+
+# ==============================================================================
+# 5. PYTHON / JAVA / APK REVERSING
+# ==============================================================================
+
+# 1. Python bytecode (.pyc decompilation):
+# pip install uncompyle6 / decompyle++
+# pycdc compiled.pyc
+
+# 2. Java class files (.class):
+# javap -c Target.class    (disassembles bytecode)
+# OR open in JD-GUI / CFR decompiler
+
+# 3. Android APK reversing:
+# apktool d app.apk -o decompiled_apk/
+# jadx-gui app.apk
