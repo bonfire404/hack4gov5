@@ -9,37 +9,45 @@
 
 
 # ==============================================================================
-# 1. STEGSOLVE (JAVA IMAGE PLANE ANALYZER)
-# Best for examining hidden LSB bitplanes in PNG/BMP images.
+# 1. STEGSOLVE (JAVA IMAGE PLANE & BITMASK ANALYZER)
+# Best for examining hidden LSB bitplanes in PNG and BMP images.
 # ==============================================================================
 
-# Launch StegSolve (CLI):
+# Launch StegSolve via CLI:
 java -jar Tools/Forensics/stegsolve.jar
 
 # Or 1-click launcher on Windows:
 Tools/Forensics/run_stegsolve.bat
 
-# Workflow inside StegSolve:
-# 1. File -> Open image.
-# 2. Click the '<' and '>' arrows at the bottom to cycle through color planes:
-#    - Red plane 0, Green plane 0, Blue plane 0 (often reveals hidden QR codes or text)
-#    - Inversion / Random color maps
-# 3. Extract hidden LSB payload:
-#    - Menu: Analyse -> Data Extract
-#    - Check Red 0, Green 0, Blue 0 (or Alpha 0)
-#    - Click 'Preview' (check if text starts with flag format or PK.. for zip)
-#    - Click 'Save Bin' or 'Save Text'
+# Standard StegSolve Workflow:
+# 1. Open Target Image: File -> Open.
+# 2. Cycle Color Planes:
+#    - Click '<' and '>' arrows at the bottom to inspect color planes:
+#      * Red Plane 0, Green Plane 0, Blue Plane 0 (frequently hides QR codes or text).
+#      * Inversion, Alpha planes, and Random color maps.
+# 3. Extract Hidden LSB Data:
+#    - Menu: Analyse -> Data Extract.
+#    - Check 'Red 0', 'Green 0', 'Blue 0' (or Alpha 0).
+#    - Bit order: MSB first or LSB first.
+#    - Click 'Preview' (Check if text starts with flag format or 'PK..' for ZIP archive).
+#    - Click 'Save Bin' to extract embedded file or 'Save Text' for strings.
+# 4. Image Combiner (Stereograms & Dual Image Challenges):
+#    - Analyse -> Image Combiner -> select 2nd image.
+#    - Test operations: XOR, OR, AND, ADD, SUB.
 
 
 # ==============================================================================
-# 2. ZSTEG (PNG & BMP LSB ANALYSIS)
+# 2. ZSTEG (PNG & BMP LSB COMMAND-LINE ANALYZER)
 # Fast CLI tool for detecting Least Significant Bit payloads.
 # ==============================================================================
 
-# 1. Automatic scan across all planes and formats:
+# 1. Automatic scan across all bitplanes, color channels, and arrangements:
 zsteg -a image.png
 
-# 2. Extract specific detected payload stream:
+# 2. View only strings and printable text:
+zsteg -s image.png
+
+# 3. Extract a specific detected payload stream:
 zsteg -E "b1,bgr,lsb,xy" image.png > extracted_payload.bin
 
 
@@ -50,34 +58,51 @@ zsteg -E "b1,bgr,lsb,xy" image.png > extracted_payload.bin
 # 1. Steghide - extract without password (blank pass):
 steghide extract -sf image.jpg -p ""
 
-# 2. Steghide - extract with password:
-steghide extract -sf image.jpg -p "<PASSWORD>"
+# 2. Steghide - extract with known password:
+steghide extract -sf image.jpg -p "password123"
 
-# 3. Outguess - extract hidden message from JPEG:
+# 3. Steghide - crack password with wordlist using stegseek (1000x faster than brute):
+stegseek image.jpg ../rockyou.txt.gz
+
+# 4. Outguess - extract hidden message from JPEG:
 outguess -r image.jpg extracted_output.txt
 
 
 # ==============================================================================
-# 4. AUDIO STEGANOGRAPHY (SPECTROGRAMS)
-# When a challenge provides a .wav or .mp3 file.
+# 4. AUDIO STEGANOGRAPHY & SPECTROGRAMS
+# When a challenge provides a .wav or .mp3 audio file.
 # ==============================================================================
 
-# 1. Open audio file in Sonic Visualiser:
-#    File -> Open -> audio.wav
-# 2. Add Spectrogram:
-#    Pane -> Add Spectrogram -> Channel: All Channels
-# 3. Inspect high frequencies:
-#    Scroll horizontally and adjust the vertical frequency scale.
-#    Look for visual letters, numbers, or Morse code etched into the sound waves.
+# 1. Sonic Visualiser Spectrogram Analysis:
+#    - File -> Open -> audio.wav
+#    - Pane -> Add Spectrogram -> Select All Channels.
+#    - In the right-hand panel, set frequency scale to Linear.
+#    - Adjust vertical frequency slider to inspect high-frequency bands (10kHz - 20kHz).
+#    - Look for visual letters, words, or Morse code drawn into the frequencies.
+
+# 2. Automated Morse Audio Extraction:
+python Tools/Crypto/morse.py -a challenge_audio.wav
+
+# 3. DTMF Tones (Telephone Keypad Dial Sounds):
+#    - If audio sounds like dual-tone telephone beeps, use multimon-ng or an offline DTMF decoder:
+#    multimon-ng -a DTMF -t wav audio.wav
 
 
 # ==============================================================================
-# 5. PASSWORD-PROTECTED ARCHIVE CRACKING (ZIP / RAR)
+# 5. PASSWORD-PROTECTED ARCHIVE CRACKING (ZIP / RAR / 7Z)
 # ==============================================================================
 
 # 1. Fast ZIP dictionary attack using fcrackzip:
-fcrackzip -u -D -p /usr/share/wordlists/rockyou.txt encrypted.zip
+fcrackzip -u -D -p ../rockyou.txt.gz encrypted.zip
 
-# 2. John the Ripper ZIP cracking (handles Deflate64 and WinZip AES):
+# 2. John the Ripper ZIP cracking (handles WinZip AES & Deflate64):
 zip2john encrypted.zip > zip.hash
-john --wordlist=/usr/share/wordlists/rockyou.txt zip.hash
+john --wordlist=../rockyou.txt.gz zip.hash
+
+# 3. RAR archive cracking:
+rar2john encrypted.rar > rar.hash
+john --wordlist=../rockyou.txt.gz rar.hash
+
+# 4. 7-Zip archive cracking:
+7z2john encrypted.7z > 7z.hash
+john --wordlist=../rockyou.txt.gz 7z.hash

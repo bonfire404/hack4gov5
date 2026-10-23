@@ -1,47 +1,83 @@
 # ==============================================================================
-# HACK4GOV CTF - 100% OFFLINE UNHASHING & CRACKING INSTRUCTIONS
-# Tool: Tools/Crypto/unhasher.py
-# Note: Zero external network callouts - fully compliant with airgap / RoE rules.
+# HACK4GOV CTF - 100% OFFLINE MULTI-CORE UNHASHER & CRACKING MANUAL
+# Tool Location: Tools/Crypto/unhasher.py
+# Reference Wordlist: ../rockyou.txt.gz (Transparent in-memory streaming)
+# Guarantee: Zero external network callouts - 100% airgap / CTF RoE compliant.
 # ==============================================================================
 
 # STEP 0: Working Directory Verification
-# In Git Bash, ensure you are in the repository root:
+# In Git Bash, ensure you are inside the repository root:
 # cd HACK4GOV3-PREP-main
 
 
 # ==============================================================================
-# METHOD 1: 8-CORE PARALLEL BRUTE FORCE (NO WORDLIST NEEDED)
-# Uses all 8 CPU cores with raw C-level binary comparisons.
-# Best for PINs, numbers, or short passwords (1 to 5 characters).
+# 1. DICTIONARY ATTACK VIA COMPRESSED WORDLIST (ROCKYOU.TXT.GZ)
+# Leverages all available CPU cores with transparent streaming decompression.
+# Never requires extracting the 134MB+ archive to disk!
 # ==============================================================================
 
-# 1. Crack 4-digit numeric PINs (0-9) - Instant (<1 sec):
+# A. Standard Crack using rockyou.txt.gz (Auto-detects algorithm MD5, NTLM, SHA-1, SHA-256):
+python Tools/Crypto/unhasher.py -t "5f4dcc3b5aa765d61d8327deb882cf99" -w ../rockyou.txt.gz
+
+# B. Fast Top-N Pre-Scan (Check top 100,000 most common passwords in <1 sec):
+python Tools/Crypto/unhasher.py -t "5f4dcc3b5aa765d61d8327deb882cf99" -w ../rockyou.txt.gz --top 100000
+
+# C. Dictionary Attack WITH Rule Mutations (-m):
+# Automatically tests base words mutated with:
+# - Numbers/Dates: word1, word12, word123, word2024, word2025, word2026, word0
+# - Symbols: word!, word?
+# - Case changes: lower, UPPER, Capitalize
+# - Leetspeak substitutions: @dm!n, p@$$w0rd, 73$7
+python Tools/Crypto/unhasher.py -t "482c811da5d5b4bc6d497ffa98491e38" -w ../rockyou.txt.gz -m
+
+# D. Fast Mutation Pre-Scan (Top 10,000 words with mutations applied):
+python Tools/Crypto/unhasher.py -t "<TARGET_HASH>" -w ../rockyou.txt.gz -m --top 10000
+
+# E. Explicit Algorithm Enforcement (e.g. Windows NTLM or SHA256):
+python Tools/Crypto/unhasher.py -t "209c6174da490caeb422f3fa5a7ae634" -a ntlm -w ../rockyou.txt.gz
+python Tools/Crypto/unhasher.py -t "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" -a sha256 -w ../rockyou.txt.gz
+
+
+# ==============================================================================
+# 2. 8-CORE PARALLEL BRUTE-FORCE (ZERO WORDLIST NEEDED)
+# Prefix-partitioned multi-process worker pool using raw C-level binary comparisons.
+# Best for PINs, access codes, short passwords, or custom challenge alphabets (1-5 chars).
+# ==============================================================================
+
+# A. 4-Digit Numeric PIN (0-9) - Instant (<0.2 sec):
 python Tools/Crypto/unhasher.py -t "e48e13207341b6bffb7fb1622282247b" -b --charset digits --max-len 4
 
-# 2. Crack 6-digit numeric PINs (0-9) - Fast (~1-2 sec across 8 cores):
+# B. 6-Digit Numeric PIN (0-9) - Fast (~1-2 sec across 8 cores):
 python Tools/Crypto/unhasher.py -t "cc738a1f81cf87103233db1af0ab63f7" -b --charset digits --max-len 6
 
-# 3. Crack lowercase words (a-z) up to length 5:
+# C. Lowercase Alphabet (a-z) up to length 5:
 python Tools/Crypto/unhasher.py -t "b0759e17c7cc70d7522a6b63a05c914e" -b --charset lower --min-len 1 --max-len 5
 
-# 4. Crack alphanumeric characters (a-z, A-Z, 0-9) up to length 4:
+# D. Alphanumeric (a-z, A-Z, 0-9) up to length 4:
 python Tools/Crypto/unhasher.py -t "21232f297a57a5a743894a0e4a801fc3" -b --charset alphanum --max-len 4
 
-# 5. Limit CPU core usage (e.g. use 4 workers instead of all 8):
-python Tools/Crypto/unhasher.py -t "e48e13207341b6bffb7fb1622282247b" -b --charset digits --max-len 4 -j 4
+# E. Full ASCII Charset (letters + digits + punctuation):
+python Tools/Crypto/unhasher.py -t "<TARGET_HASH>" -b --charset all --max-len 3
+
+# F. Custom Charset (e.g. only hex chars or flag alphabet):
+python Tools/Crypto/unhasher.py -t "<TARGET_HASH>" -b --chars "0123456789abcdef" --max-len 6
+
+# G. CPU Core Throttling (e.g. reserve CPU power by using 4 workers instead of all 8):
+python Tools/Crypto/unhasher.py -t "<TARGET_HASH>" -b --charset digits --max-len 6 -j 4
 
 
 # ==============================================================================
-# METHOD 2: DICTIONARY ATTACK (OFFLINE WORDLISTS)
-# Best for words longer than 5 characters or standard passwords.
+# 3. COMMON CTF ATTACK SCENARIOS & WORKFLOWS
 # ==============================================================================
 
-# 1. Standard wordlist dictionary attack (using local rockyou.txt):
-python Tools/Crypto/unhasher.py -t "63a9f0ea7bb98050796b649e85481845" -w /usr/share/wordlists/rockyou.txt
+# Scenario A: You found an NTLM hash dump from Windows SAM or LSASS:
+# NTLM length is always 32 hex chars. unhasher.py tests MD5 and NTLM simultaneously:
+python Tools/Crypto/unhasher.py -t "31d6cfe0d16ae931b73c59d7e0c089c0" -a ntlm -w ../rockyou.txt.gz
 
-# 2. Wordlist attack WITH rule mutations (-m):
-# Automatically checks: adds '1', '123', '!', '2026', CAPITALIZES, and leetspeak (@dm!n)
-python Tools/Crypto/unhasher.py -t "5d41402abc4b2a76b9719d911017c592" -w wordlist.txt -m
+# Scenario B: A web service uses MD5(password + salt) or password with trailing newline:
+# unhasher.py automatically appends '\n' test candidates for every candidate word,
+# guaranteeing matches on raw newline-terminated strings.
 
-# 3. Force explicit algorithm (e.g. NTLM):
-python Tools/Crypto/unhasher.py -t "209c6174da490caeb422f3fa5a7ae634" -a ntlm -w wordlist.txt
+# Scenario C: Challenge gives an unknown 64-character hash:
+# Automatic length deduction identifies SHA-256 immediately:
+python Tools/Crypto/unhasher.py -t "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8" -w ../rockyou.txt.gz

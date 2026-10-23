@@ -1,5 +1,5 @@
 # ==============================================================================
-# HACK4GOV CTF - REVERSE ENGINEERING INSTRUCTIONS & CHEATSHEET
+# HACK4GOV CTF - REVERSE ENGINEERING & BINARY ANALYSIS MANUAL
 # Location: Tools/Reversing/
 # ==============================================================================
 
@@ -10,24 +10,25 @@
 
 # ==============================================================================
 # 1. INITIAL BINARY RECONNAISSANCE
-# When given an unknown executable binary (ELF, EXE, APK, class).
+# When given an unknown executable binary (ELF, EXE, APK, class, pyc).
 # ==============================================================================
 
 # 1. Automated 1-Second Binary Triage (Architecture, Flags, Functions, XOR keys):
 python Tools/Reversing/rev_triage.py path/to/binary_name
 
-# 2. Identify file architecture manually (32-bit / 64-bit / ARM / x86):
+# 2. Identify file architecture manually (32-bit / 64-bit / ARM / x86 / statically vs dynamically linked):
 file binary_name
 
-# 2. Check binary security mitigations (Canary, NX, PIE, RELRO):
+# 3. Check binary security mitigations (Canary, NX, PIE, RELRO):
 checksec --file=binary_name
 
-# 3. Search for hardcoded plaintext flags, credentials, or strings:
-strings -a binary_name | grep -iE "flag|hack4gov|pass|correct|congrat|winner"
+# 4. Search for hardcoded plaintext flags, credentials, or strings:
+strings -a binary_name | grep -iE "flag|hack4gov|pass|correct|congrat|winner|key|secret"
 
-# 4. View detailed binary sections and entrypoint:
+# 5. View binary headers, entrypoint, and imported dynamic symbols:
 readelf -h binary_name
-objdump -f binary_name
+readelf -s binary_name | grep -iE "func|check|flag|auth"
+objdump -d -M intel binary_name | grep -A 20 "<main>:"
 
 
 # ==============================================================================
@@ -35,77 +36,96 @@ objdump -f binary_name
 # Many beginner/intermediate CTFs compare your input using strcmp() in plaintext!
 # ==============================================================================
 
-# 1. Trace C library calls (intercepts strcmp, strncmp, printf, fopen):
+# 1. Trace C library calls (intercepts strcmp, strncmp, memcmp, printf, fopen):
 ltrace ./binary_name
 # When it prompts for password, enter "test1234".
 # Watch the output for: strcmp("test1234", "hack4gov{r3v_fl4g_h3r3}") == 1
 
-# 2. Trace low-level Linux system calls:
+# 2. Capture ltrace output with increased string length limit (-s 128):
+ltrace -s 128 ./binary_name
+
+# 3. Trace low-level Linux system calls (reads, writes, open, sockets):
 strace ./binary_name
 
 
 # ==============================================================================
-# 3. GHIDRA STATIC ANALYSIS WORKFLOW
-# Best for complex algorithms, XOR keys, and obfuscated routines.
+# 3. GDB (GNU DEBUGGER) STEP-BY-STEP DYNAMIC BREAKPOINTS
+# Intercept execution, inspect registers, and force conditional jumps.
 # ==============================================================================
 
-# 1. Launch Ghidra:
-#    Open Ghidra -> File -> New Project -> Non-Shared Project.
-# 2. Import Binary:
-#    Drag binary into Ghidra -> Double click the file to open CodeBrowser.
-# 3. Auto-Analyze:
-#    Click 'Yes' to analyze -> Accept default analyzers -> Click 'Analyze'.
-# 4. Locate Key Logic:
-#    - In the 'Symbol Tree' window (middle left), expand 'Functions'.
-#    - Filter for 'main', 'validate', 'check', 'verify', or 'auth'.
-# 5. Review Decompiled C:
-#    - Click the function name.
-#    - Read the C pseudo-code in the 'Decompiler' window on the right.
-#    - Look for loop logic (XOR operations `^`, array indexing, or math checks).
+# 1. Launch GDB (prefer gef or pwndbg if installed):
+gdb -q ./binary_name
 
+# 2. Set Intel disassembly syntax:
+# (gdb) set disassembly-flavor intel
 
-# ==============================================================================
-# 4. GDB (GNU DEBUGGER) DYNAMIC BREAKPOINTS
-# Inspect registers and memory during execution.
-# ==============================================================================
-
-# 1. Start GDB:
-gdb ./binary_name
-
-# 2. Disassemble main function:
+# 3. Disassemble functions:
 # (gdb) disassemble main
+# (gdb) disassemble validate_flag
 
-# 3. Set a breakpoint right before flag check:
-# (gdb) break *check_flag
-# OR set by address:
-# (gdb) break *0x00401234
+# 4. Set breakpoints at critical comparison instructions:
+# (gdb) break *main
+# (gdb) break *validate_flag
+# (gdb) break *0x00401234    (set at instruction address)
 
-# 4. Run the program:
+# 5. Run the target program:
 # (gdb) run
+# (gdb) run < input.txt
 
-# 5. Read register values as strings when breakpoint hits:
-# (gdb) x/s $rdi
-# (gdb) x/s $rsi
-# (gdb) x/s $rax
+# 6. Inspect registers when breakpoint hits:
+# (gdb) info registers
+# (gdb) x/s $rdi             (examine string in 1st argument register)
+# (gdb) x/s $rsi             (examine string in 2nd argument register)
+# (gdb) x/s $rax             (examine return value or comparison string)
+# (gdb) x/16xb $rbp-0x20     (examine 16 raw hex bytes on stack)
 
-# 6. Step through instructions:
-# (gdb) ni   (next instruction, step over)
-# (gdb) si   (step into function)
-# (gdb) c    (continue execution)
+# 7. Step through instructions:
+# (gdb) ni                   (step over function call)
+# (gdb) si                   (step into function call)
+# (gdb) c                    (continue execution until next breakpoint)
+
+# 8. Force bypass a check (modify return value register):
+# (gdb) set $rax = 1         (forces flag validation check to succeed)
+# (gdb) set $eflags ^= 0x40  (flips Zero Flag to reverse jz / jnz jump outcome)
 
 
 # ==============================================================================
-# 5. PYTHON / JAVA / APK REVERSING
+# 4. GHIDRA STATIC ANALYSIS WORKFLOW
+# Best for reversing custom encryption loops, XOR arrays, and obfuscated logic.
 # ==============================================================================
 
-# 1. Python bytecode (.pyc decompilation):
-# pip install uncompyle6 / decompyle++
-# pycdc compiled.pyc
+# 1. Create Project & Import:
+#    File -> New Project -> Non-Shared Project. Drag binary in and double-click to open.
+# 2. Auto-Analyze:
+#    Accept default analyzers and click 'Analyze'.
+# 3. Locate Key Routines:
+#    - In the 'Symbol Tree' window, expand 'Functions'.
+#    - Filter for 'main', 'check', 'validate', 'verify', 'auth', 'encrypt'.
+# 4. Read Decompiled C Pseudo-code:
+#    - In the 'Decompiler' window on the right, read the C pseudocode.
+#    - Right-click variables -> 'Rename Variable' (e.g. rename 'local_18' to 'input_buffer').
+#    - Right-click variables -> 'Retype Variable' (e.g. 'char *' or 'uint').
+# 5. Extract XOR Keys and Encrypted Buffers:
+#    - Double-click variable names referencing memory addresses (e.g. `DAT_00404020`).
+#    - Copy bytes directly into Python for offline decryption.
 
-# 2. Java class files (.class):
-# javap -c Target.class    (disassembles bytecode)
-# OR open in JD-GUI / CFR decompiler
 
-# 3. Android APK reversing:
-# apktool d app.apk -o decompiled_apk/
-# jadx-gui app.apk
+# ==============================================================================
+# 5. INTERPRETED BYTECODE REVERSING (PYTHON, JAVA, APK)
+# ==============================================================================
+
+# 1. Python Bytecode (.pyc decompilation):
+# pycdc compiled_file.pyc
+# uncompyle6 compiled_file.pyc
+
+# 2. Extract PyInstaller Standalone Executable (.exe -> .pyc):
+# python pyinstxtractor.py target.exe
+
+# 3. Java Classes & JARs (.class, .jar):
+# javap -c Target.class       (disassemble raw JVM bytecode)
+# jd-gui Target.jar           (GUI decompiler)
+# cfr Target.jar --outputdir decompiled_src/
+
+# 4. Android APK Reverse Engineering:
+# apktool d application.apk -o apk_source/    (extracts AndroidManifest.xml and Smali code)
+# jadx-gui application.apk                    (decompiles Dalvik bytecode to clean Java source)

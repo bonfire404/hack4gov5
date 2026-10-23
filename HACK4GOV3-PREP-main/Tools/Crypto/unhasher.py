@@ -16,6 +16,7 @@ import hashlib
 import itertools
 import string
 import time
+import gzip
 from multiprocessing import Pool, cpu_count, Event
 
 # Pure-Python RFC 1320 MD4 Fallback for NTLM
@@ -184,7 +185,49 @@ def apply_mutations(word: str) -> list:
     mutations.add(leet_word + "!")
     return list(mutations)
 
-def crack_dictionary(target_hash: str, wordlist_path: str, algos: list, mutate: bool = False):
+def open_wordlist(path: str):
+    """Opens plain text or gzipped wordlist (.gz) with transparent streaming."""
+    try:
+        with open(path, 'rb') as f:
+            magic = f.read(2)
+        if magic == b'\x1f\x8b' or path.lower().endswith('.gz'):
+            return gzip.open(path, 'rt', encoding='latin-1', errors='ignore')
+    except Exception:
+        pass
+    return open(path, 'r', encoding='latin-1', errors='ignore')
+
+def _worker_dict_batch(args):
+    batch, target_bytes, algos = args
+    for candidate in batch:
+        cand_bytes = candidate.encode('latin-1', errors='ignore')
+        for alg in algos:
+            if RAW_HASH_FUNCS[alg](cand_bytes) == target_bytes:
+                return (candidate, alg)
+    return None
+
+def _batch_generator(wordlist_path, mutate, max_words=None, batch_size=20000):
+    with open_wordlist(wordlist_path) as f:
+        current_batch = []
+        words_read = 0
+        for line in f:
+            words_read += 1
+            base_word = line.rstrip('\r\n')
+            candidates = apply_mutations(base_word) if mutate else [base_word]
+            if "\n" not in base_word:
+                candidates.append(base_word + "\n")
+
+            for c in candidates:
+                current_batch.append(c)
+                if len(current_batch) >= batch_size:
+                    yield current_batch
+                    current_batch = []
+
+            if max_words and words_read >= max_words:
+                break
+        if current_batch:
+            yield current_batch
+
+def crack_dictionary(target_hash: str, wordlist_path: str, algos: list, mutate: bool = False, workers: int = None, max_words: int = None):
     target_clean = target_hash.strip().lower()
     try:
         target_bytes = bytes.fromhex(target_clean)
@@ -196,44 +239,53 @@ def crack_dictionary(target_hash: str, wordlist_path: str, algos: list, mutate: 
         print(f"[-] Error: Wordlist not found at '{wordlist_path}'")
         return False
 
+    is_gz = False
+    try:
+        with open(wordlist_path, 'rb') as f:
+            is_gz = (f.read(2) == b'\x1f\x8b') or wordlist_path.lower().endswith('.gz')
+    except Exception:
+        pass
+
+    cores = workers or max(1, cpu_count())
     print(f"[*] Target Hash: {target_clean}")
     print(f"[*] Algorithms : {', '.join([a.upper() for a in algos])}")
     print(f"[*] Wordlist   : {wordlist_path}")
+    print(f"[*] Format     : {'Gzip Archive (Decompressing on-the-fly)' if is_gz else 'Plaintext'}")
+    print(f"[*] Workers    : {cores} parallel CPU cores")
     print(f"[*] Mutations  : {'Enabled' if mutate else 'Disabled'}")
+    if max_words:
+        print(f"[*] Limit      : First {max_words:,} words")
     print("[*] Cracking...\n")
 
     start_time = time.time()
     tested = 0
 
-    with open(wordlist_path, 'r', encoding='latin-1', errors='ignore') as f:
-        for line in f:
-            base_word = line.rstrip('\r\n')
-            candidates = apply_mutations(base_word) if mutate else [base_word]
-
-            if "\n" not in base_word:
-                candidates.append(base_word + "\n")
-
-            for candidate in candidates:
-                cand_bytes = candidate.encode('latin-1', errors='ignore')
-                tested += 1
-
-                for alg in algos:
-                    calc = RAW_HASH_FUNCS[alg](cand_bytes)
-                    if calc == target_bytes:
-                        elapsed = time.time() - start_time
-                        print("=" * 65)
-                        print(f"[+] CRACKED! Match found: {repr(candidate)}")
-                        print(f"[+] Algorithm : {alg.upper()}")
-                        print(f"[+] Tested    : {tested:,} attempts in {elapsed:.2f}s ({tested/(elapsed or 0.001):.0f} h/s)")
-                        print("=" * 65)
-                        return True
+    try:
+        with Pool(processes=cores) as pool:
+            task_generator = ((batch, target_bytes, algos) for batch in _batch_generator(wordlist_path, mutate, max_words, batch_size=20000))
+            for res in pool.imap(_worker_dict_batch, task_generator, chunksize=1):
+                tested += 20000
+                if res is not None:
+                    candidate, matched_algo = res
+                    elapsed = time.time() - start_time
+                    pool.terminate()
+                    print("\n" + "=" * 65)
+                    print(f"[+] CRACKED! Match found: {repr(candidate)}")
+                    print(f"[+] Algorithm : {matched_algo.upper()}")
+                    print(f"[+] Elapsed   : {elapsed:.2f}s (~{int(tested/(elapsed or 0.001)):,} h/s)")
+                    print("=" * 65)
+                    return True
 
                 if tested % 100000 == 0:
                     elapsed = time.time() - start_time
-                    print(f"[*] Tested {tested:,} candidates ({tested/(elapsed or 0.001):.0f} h/s)...", end='\r')
+                    print(f"[*] Tested ~{tested:,} candidates ({int(tested/(elapsed or 0.001)):,} h/s)...", end='\r')
+
+    except KeyboardInterrupt:
+        print("\n[!] Cracking halted by user.")
+        return False
 
     elapsed = time.time() - start_time
-    print(f"\n[-] Exhausted wordlist ({tested:,} candidates tested in {elapsed:.2f}s).")
+    print(f"\n[-] Exhausted wordlist (~{tested:,} candidates tested in {elapsed:.2f}s).")
     return False
 
 def main():
@@ -243,8 +295,9 @@ def main():
     parser.add_argument("-j", "--workers", type=int, help="Number of CPU worker threads (defaults to all cores)")
 
     # Dictionary Mode
-    parser.add_argument("-w", "--wordlist", help="Path to dictionary/wordlist file")
+    parser.add_argument("-w", "--wordlist", help="Path to dictionary/wordlist file (.txt or .gz)")
     parser.add_argument("-m", "--mutate", action="store_true", help="Apply common CTF rule mutations (numbers, case, leet)")
+    parser.add_argument("--top", type=int, help="Limit dictionary test to top N words (e.g. 100000)")
 
     # Brute Force Mode
     parser.add_argument("-b", "--bruteforce", action="store_true", help="Enable on-the-fly permutation brute force")
@@ -274,7 +327,7 @@ def main():
         algo = selected_algos[0]
         crack_bruteforce_multiprocess(args.target, chars, args.min_len, args.max_len, algo, args.workers)
     elif args.wordlist:
-        crack_dictionary(args.target, args.wordlist, selected_algos, args.mutate)
+        crack_dictionary(args.target, args.wordlist, selected_algos, args.mutate, args.workers, args.top)
     else:
         print("[-] Error: Specify either a dictionary (-w <file>) or enable brute force (-b).")
         print("[*] Run with -h for help.")

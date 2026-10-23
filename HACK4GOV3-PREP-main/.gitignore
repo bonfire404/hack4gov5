@@ -31,4 +31,9 @@ Desktop.ini
 
 # Large Wordlists & Dictionaries
 *.wordlist
-rockyou*.txt
+rockyou*
+*.gz
+*.tar.gz
+*.zip
+*.7z
+

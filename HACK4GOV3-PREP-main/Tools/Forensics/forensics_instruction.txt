@@ -10,26 +10,53 @@
 
 # ==============================================================================
 # 1. FILE HEADER INSPECTION & CORRUPTION REPAIR (MAGIC BYTES)
-# When a challenge file won't open or has an unknown extension.
+# When a challenge file won't open, has an unknown extension, or zeroed headers.
 # ==============================================================================
 
-# Check the first 16 bytes in hexadecimal:
+# Inspect the first 16 bytes in hexadecimal:
 xxd -l 16 challenge_file.bin
+# Or using head and xxd:
+head -c 16 challenge_file.bin | xxd
 
-# Standard Hex Signatures:
-# PNG:  89 50 4E 47 0D 0A 1A 0A
-# JPG:  FF D8 FF E0  (or FF D8 FF E1)
-# GIF:  47 49 46 38 39 61
-# PDF:  25 50 44 46
-# ZIP:  50 4B 03 04
-# ELF:  7F 45 4C 46
+# Standard Magic Byte Signatures:
+# PNG:       89 50 4E 47 0D 0A 1A 0A     (Trailer: 49 45 4E 44 AE 42 60 82 / IEND)
+# JPEG/JPG:  FF D8 FF E0  or  FF D8 FF E1 (Trailer: FF D9)
+# GIF:       47 49 46 38 39 61  (GIF89a)  or  47 49 46 38 37 61 (GIF87a)
+# PDF:       25 50 44 46                 (Trailer: %%EOF)
+# ZIP/DOCX:  50 4B 03 04                 (PK..)
+# 7Z:        37 7A BC AF 27 1C
+# GZIP:      1F 8B 08
+# TAR:       75 73 74 61 72              (at offset 257: "ustar")
+# ELF:       7F 45 4C 46                 (.ELF - Linux Executable)
+# PE/EXE:    4D 5A                       (MZ - Windows Executable)
+# PCAP:      D4 C3 B2 A1  or  A1 B2 C3 D4
+# PCAPNG:    0A 0D 0D 0A
+# SQLite 3:  53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00
+# WAV Audio: 52 49 46 46 (RIFF) ... 57 41 56 45 (WAVE)
 
-# Quick Python Header Fix (Example: Restore corrupted PNG header):
+# Quick Python Header Repair One-Liners:
+# 1. Restore PNG Header:
 python -c '
 with open("corrupted.png", "r+b") as f:
     f.seek(0)
     f.write(bytes.fromhex("89504E470D0A1A0A"))
-print("[+] Header restored to PNG.")
+print("[+] Restored PNG magic bytes.")
+'
+
+# 2. Restore JPEG Header:
+python -c '
+with open("corrupted.jpg", "r+b") as f:
+    f.seek(0)
+    f.write(bytes.fromhex("FFD8FFE0"))
+print("[+] Restored JPEG magic bytes.")
+'
+
+# 3. Restore ZIP Header:
+python -c '
+with open("corrupted.zip", "r+b") as f:
+    f.seek(0)
+    f.write(bytes.fromhex("504B0304"))
+print("[+] Restored ZIP magic bytes.")
 '
 
 
@@ -38,15 +65,18 @@ print("[+] Header restored to PNG.")
 # ==============================================================================
 
 # 1. Extract readable strings filtered for CTF flags:
-strings -n 8 target_file | grep -iE "flag|hack4gov|pass|user|admin"
+strings -n 8 target_file | grep -iE "flag|hack4gov|pass|user|admin|key"
 
-# 2. View EXIF metadata (GPS coordinates, author, camera, hidden comments):
+# 2. Search strings in UTF-16 (Windows Little Endian strings):
+strings -e l target_file | grep -iE "flag|hack4gov"
+
+# 3. View EXIF metadata (GPS coordinates, author, camera, hidden comments):
 exiftool target_image.jpg
 
-# 3. Automatically extract embedded hidden files (ZIPs/images inside images):
+# 4. Automatically extract embedded hidden files (ZIPs/images inside images):
 binwalk -e target_file
 
-# 4. Alternative carver for damaged/concatenated data:
+# 5. Alternative carver for damaged/concatenated data:
 foremost -i target_file -o output_carved/
 
 
@@ -54,37 +84,72 @@ foremost -i target_file -o output_carved/
 # 3. NETWORK FORENSICS (WIRESHARK & TSHARK PCAP ANALYSIS)
 # ==============================================================================
 
-# Wireshark GUI Display Filters:
-# - Filter for HTTP logins/POST requests:  http.request.method == "POST"
-# - Search packet bytes for flag text:    frame contains "hack4gov" || frame contains "flag"
-# - Isolate a conversation stream:        tcp.stream eq 0
-# - Identify DNS data exfiltration:       dns.flags.response == 0
-# - Export files transferred over wire:   File -> Export Objects -> HTTP / SMB / IMF
+# Essential Wireshark Display Filters:
+# - Filter HTTP logins/POST requests:    http.request.method == "POST"
+# - Search packet bytes for flag text:      frame contains "hack4gov" || frame contains "flag"
+# - Isolate a conversation stream:          tcp.stream eq 0
+# - Identify DNS data exfiltration:         dns.flags.response == 0
+# - Filter by specific IP:                  ip.addr == 10.10.10.5
+# - Filter by port:                         tcp.port == 80 || udp.port == 53
+# - Export files transferred over wire:     File -> Export Objects -> HTTP / SMB / IMF
 
 # Tshark Command-Line One-Liners (Fast CLI extraction):
 # 1. Print all HTTP POST request bodies from PCAP:
 tshark -r capture.pcap -Y 'http.request.method == "POST"' -T fields -e http.file_data
 
-# 2. Extract all unique queried DNS hostnames:
+# 2. Extract all unique queried DNS hostnames (DNS tunneling detection):
 tshark -r capture.pcap -T fields -e dns.qry.name | sort -u
 
 # 3. Extract transmitted cleartext credentials:
 tshark -r capture.pcap -Y 'http contains "password" || http contains "passwd"' -T fields -e text
 
+# 4. Extract transmitted files automatically via tshark:
+tshark -r capture.pcap --export-objects "http,carved_web_files"
+
+# 5. Follow TCP stream 0 from CLI:
+tshark -r capture.pcap -z "follow,tcp,ascii,0"
+
 
 # ==============================================================================
-# 4. MEMORY FORENSICS (VOLATILITY 2 / 3 QUICK REFERENCE)
+# 4. MEMORY FORENSICS (VOLATILITY 3 & VOLATILITY 2 CHEATSHEET)
 # ==============================================================================
 
-# Volatility 2 Syntax:
-# 1. Detect image profile:
+# Volatility 3 Syntax:
+# 1. Process List:
+vol -f memory.raw windows.pslist
+vol -f memory.raw windows.pstree
+
+# 2. Command Line Arguments of Processes:
+vol -f memory.raw windows.cmdline
+
+# 3. Scan for Injected Code / DLLs:
+vol -f memory.raw windows.malfind
+
+# 4. Scan for Specific Files (Flags, Desktop files):
+vol -f memory.raw windows.filescan | grep -iE "flag|desktop|secret|pass"
+
+# 5. Dump File from Memory by Physical Address:
+vol -f memory.raw -o output_dir windows.dumpfiles --virtaddr <OFFSET>
+
+# 6. Dump Password Hashes from SAM registry hive:
+vol -f memory.raw windows.hashdump
+
+# Volatility 2 Syntax (Legacy):
 # vol.py -f memory.raw imageinfo
-
-# 2. List running processes:
 # vol.py -f memory.raw --profile=<PROFILE> pslist
-
-# 3. Search for files containing flag or sensitive names:
-# vol.py -f memory.raw --profile=<PROFILE> filescan | grep -iE "flag|desktop|secret"
-
-# 4. Dump target file by memory physical offset:
+# vol.py -f memory.raw --profile=<PROFILE> filescan | grep -i "flag"
 # vol.py -f memory.raw --profile=<PROFILE> dumpfiles -Q <OFFSET> -D .
+
+
+# ==============================================================================
+# 5. DISK & FILESYSTEM FORENSICS (SLEUTHKIT)
+# ==============================================================================
+
+# 1. View partition layout on disk image:
+mmls disk.img
+
+# 2. List files (including deleted files denoted with *):
+fls -r -o <OFFSET> disk.img
+
+# 3. Recover/extract a deleted file by inode number:
+icat -o <OFFSET> disk.img <INODE> > recovered_file.bin

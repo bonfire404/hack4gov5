@@ -1,3 +1,113 @@
-List of most used tools in opensource intelligence
+# ==============================================================================
+# HACK4GOV CTF - OPEN SOURCE INTELLIGENCE (OSINT) & RECON CHEATSHEET
+# Category: Forensics / OSINT / Reconnaissance
+# ==============================================================================
 
-Link: https://www.octopusintelligence.com/list-of-competitive-intelligence-osint-image-tools-to-analyse-images/
+# ==============================================================================
+# 1. REVERSE IMAGE SEARCH & IMAGE VERIFICATION
+# Used when given a cropped photo, monument, logo, or unknown location.
+# ==============================================================================
+
+# Primary Reverse Search Engines (Sorted by CTF Effectiveness):
+# 1. Yandex Visual Search (https://yandex.com/images/)
+#    - Most powerful engine for facial recognition, international landmarks, and exact match cropping.
+# 2. Google Lens / Google Images (https://lens.google.com/)
+#    - Best for consumer products, logos, standard monuments, and text translation in images.
+# 3. Bing Visual Search (https://www.bing.com/visualsearch)
+#    - Excellent alternative when Google/Yandex fail on architectural or indoor shots.
+# 4. TinEye (https://tineye.com/)
+#    - Oldest image crawler; best for tracking the earliest upload date and unmodified high-res sources.
+
+# Image Manipulation & Analysis:
+# - FotoForensics (https://fotoforensics.com/): Error Level Analysis (ELA) to detect Photoshop edits.
+# - CyberChef: Extract strings, parse EXIF data, or convert base64 thumbnails.
+
+
+# ==============================================================================
+# 2. GEOLOCATION & CHRONOLOCATION (SHADOW & MAP ANALYSIS)
+# Finding the exact coordinates and time an image or video was captured.
+# ==============================================================================
+
+# 1. EXIF Metadata Geotag Extraction:
+exiftool -GPSLatitude -GPSLongitude -GPSPosition image.jpg
+# If GPS coordinates are in degrees/minutes/seconds, format into decimal for Google Maps:
+# Format: 14°35'28.2"N 120°58'59.1"E -> Search directly in Google Maps.
+
+# 2. OpenStreetMap Feature Querying (Overpass Turbo):
+#    Link: https://overpass-turbo.eu/
+#    Query specific co-located items (e.g., church within 50m of a railway and bakery):
+#    Example Overpass QL query:
+#    node["amenity"="place_of_worship"](around:100, lat, lon);
+
+# 3. Sun & Shadow Analysis (Chronolocation):
+#    - SunCalc (https://www.suncalc.org/):
+#      Calculates sun position, elevation, and shadow length/angle at any given location, date, and time.
+#    - Shadow Ratio Formula: Shadow Length / Object Height = cotangent(Solar Elevation).
+
+# 4. Geolocation Heuristics Checklist:
+#    - License plate colors and numbering schemes (e.g. green plates, EU country identifiers).
+#    - Driving side (Left-hand vs. Right-hand drive road signs and markings).
+#    - Utility pole types (Concrete vs wood, stepped transformer poles in Japan/Philippines).
+#    - Language, dialect, and street sign typography.
+#    - Architecture, roof pitches, and local flora/vegetation.
+
+
+# ==============================================================================
+# 3. USERNAME, SOCIAL MEDIA & PERSON INVESTIGATION
+# ==============================================================================
+
+# 1. Fast CLI Username Enumeration across 400+ Platforms (Sherlock / Maigret):
+# sherlock <username>
+# maigret <username> -a
+
+# 2. Web-based Username Lookups:
+# - WhatsMyName: https://whatsmyname.app/
+# - Namechk: https://namechk.com/
+
+# 3. Email & Breach Intelligence:
+# - HaveIBeenPwned: https://haveibeenpwned.com/
+# - Epieos (Reverse Email / Phone Lookup): https://epieos.com/
+# - Holehe (Checks if email is registered across 120+ platforms):
+#   holehe target@example.com
+
+
+# ==============================================================================
+# 4. DOMAIN, IP & INFRASTRUCTURE OSINT
+# ==============================================================================
+
+# 1. DNS Record Querying via Git Bash:
+whois targetdomain.com
+dig targetdomain.com ANY +noall +answer
+dig targetdomain.com MX
+dig targetdomain.com TXT    # Often contains SPF, verification codes, or flags!
+
+# 2. Certificate Transparency Logs (Discover Hidden Subdomains):
+# Query crt.sh for all registered SSL certificates:
+curl -s "https://crt.sh/?q=%.targetdomain.com&output=json" | jq -r '.[].name_value' | sort -u
+
+# 3. Historical Website Archives:
+# - Wayback Machine: https://web.archive.org/
+# - Archive.today: https://archive.is/
+# Fast CLI query of all archived URLs for a target domain:
+curl -s "http://web.archive.org/cdx/search/cdx?url=*.targetdomain.com/*&output=text&fl=original" | sort -u
+
+# 4. Shodan Search Syntax (Exposed Services & Ports):
+# hostname:"targetdomain.com"
+# net:"192.168.1.0/24"
+# port:"21,22,80,443,8080,3389"
+# org:"Target Corporation"
+# "default password" or "HACK4GOV"
+
+
+# ==============================================================================
+# 5. GOOGLE DORKING (ADVANCED SEARCH OPERATORS)
+# ==============================================================================
+
+# Find exposed configuration or credential files:
+# site:target.com filetype:env "DB_PASSWORD"
+# site:target.com filetype:log "password"
+# site:target.com intitle:"index of /"
+# site:target.com filetype:sql "INSERT INTO"
+# site:target.com filetype:pdf "confidential" OR "internal use only"
+# site:pastebin.com "target.com"
+# site:github.com "target.com" "api_key" OR "secret"
